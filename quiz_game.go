@@ -4,14 +4,15 @@ import (
 	"encoding/csv"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"os"
-	"strconv"
+	"strings"
+	"time"
 )
 
 func main() {
 	csvPtr := flag.String("csv", "problems.csv", "a csv in the format of 'question,answer'")
+	limitPtr := flag.Int64("limit", 30, "time limit in seconds to answer questions")
 
 	flag.Parse()
 
@@ -19,33 +20,41 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer file.Close() // NOTE(Katie): What is happening here? The file is being closed, by why here and why defer?
+	defer file.Close()
 
 	reader := csv.NewReader(file)
+	records, err := reader.ReadAll()
+	if err != nil {
+		log.Fatal(err)
+	}
 
+	fmt.Println("Press [Enter] to Begin!")
+	fmt.Scanln()
+
+	timeout := time.After(time.Duration(*limitPtr) * time.Second)
 	correct := 0
-	count := 0
 
-	for {
-		record, err := reader.Read()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			log.Fatal(err)
-		}
+quizLoop:
+	for i, record := range records {
+		fmt.Printf("Problem # %d: %s = ", i+1, record[0])
 
-		count++
+		inputChan := make(chan string)
 
-		fmt.Printf("Problem #" + strconv.Itoa(count) + ": " + record[0] + " = ")
+		go func() {
+			var answer string
+			fmt.Scanln(&answer)
+			inputChan <- strings.TrimSpace(answer)
+		}()
 
-		var answer string
-		fmt.Scanln(&answer)
-
-		if answer == record[1] {
-			correct += 1
+		select {
+		case answer := <-inputChan:
+			if answer == record[1] {
+				correct++
+			}
+		case <-timeout:
+			break quizLoop
 		}
 	}
 
-	fmt.Println("You scored " + strconv.Itoa(correct) + " out of " + strconv.Itoa(count))
+	fmt.Printf("\nYou scored %d out of %d\n", correct, len(records))
 }
